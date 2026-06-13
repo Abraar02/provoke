@@ -1,0 +1,51 @@
+name: LLM Red-Team
+
+# Example of using Provoke as a CI security gate. This demo scans the offline
+# mock target so it runs with no secrets. For a real target, set `type:
+# openai_compat` in the config and pass the API key via `env:` from secrets,
+# then drop `--no-fail` so a regression actually fails the build.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly nightly-style baseline
+
+permissions:
+  contents: read
+  security-events: write # required to upload SARIF to code scanning
+
+jobs:
+  redteam:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Provoke
+        run: uv pip install --system -e .
+
+      - name: Run red-team scan
+        run: |
+          provoke scan -c provoke.example.yaml \
+            --format markdown,json,sarif \
+            --output provoke-report \
+            --no-fail
+
+      - name: Publish summary
+        if: always()
+        run: cat provoke-report/provoke.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: provoke-report/provoke.sarif
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provoke-report
+          path: provoke-report/

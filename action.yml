@@ -1,0 +1,53 @@
+name: "Provoke LLM Red-Team"
+description: "Run adversarial LLM red-team probes in CI and gate on attack-success-rate."
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  config:
+    description: "Path to the Provoke config YAML."
+    required: false
+    default: "provoke.yaml"
+  output:
+    description: "Directory for report artifacts."
+    required: false
+    default: "provoke-report"
+  formats:
+    description: "Comma-separated report formats (markdown,json,sarif)."
+    required: false
+    default: "markdown,json,sarif"
+  fail-on-threshold:
+    description: "Fail the job when the ASR gate is exceeded."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install Provoke
+      shell: bash
+      run: uv pip install --system provoke
+
+    - name: Run scan
+      shell: bash
+      run: |
+        FAIL_FLAG=""
+        if [ "${{ inputs.fail-on-threshold }}" != "true" ]; then
+          FAIL_FLAG="--no-fail"
+        fi
+        provoke scan -c "${{ inputs.config }}" \
+          --format "${{ inputs.formats }}" \
+          --output "${{ inputs.output }}" \
+          $FAIL_FLAG
+
+    - name: Publish summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f "${{ inputs.output }}/provoke.md" ]; then
+          cat "${{ inputs.output }}/provoke.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
