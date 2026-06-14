@@ -39,6 +39,9 @@ jobs:
 
       - name: Upload SARIF to code scanning
         if: always()
+        # Code scanning needs GitHub Advanced Security, which is unavailable on
+        # private repos by default — don't fail the run when it's not enabled.
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: provoke-report/provoke.sarif
