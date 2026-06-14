@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from provoke.data import load_refusal_phrases
 from provoke.models import Attempt
+from provoke.reasoning import strip_reasoning
 
 
 @dataclass(slots=True)
@@ -22,7 +23,7 @@ class RefusalDetector:
     phrases: tuple[str, ...] = field(default_factory=lambda: tuple(load_refusal_phrases()))
 
     def evaluate(self, attempt: Attempt, response: str) -> tuple[bool, float]:
-        text = response.strip().lower()
+        text = strip_reasoning(response).lower()
         if not text:
             # An empty / errored response is not evidence of compromise.
             return False, 0.0

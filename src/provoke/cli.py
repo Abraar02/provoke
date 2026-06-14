@@ -80,7 +80,7 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         return 2
 
     try:
-        target = build_target(config.target)
+        target = build_target(config.target, request_timeout_s=config.run.timeout_s)
         probes = resolve_probes(config.probes)
     except (TargetError, KeyError) as exc:
         _err(f"setup error: {exc}")

@@ -15,8 +15,12 @@ if TYPE_CHECKING:
 __all__ = ["Target", "TargetError", "MockTarget", "OpenAICompatTarget", "build_target"]
 
 
-def build_target(cfg: TargetConfig) -> Target:
-    """Construct a Target from a validated TargetConfig."""
+def build_target(cfg: TargetConfig, *, request_timeout_s: float = 30.0) -> Target:
+    """Construct a Target from a validated TargetConfig.
+
+    request_timeout_s (the engine's run.timeout_s) is the single per-request
+    timeout, applied to the HTTP client so it matches the engine's ceiling.
+    """
     target_type = cfg.type
     name = cfg.name
 
@@ -42,7 +46,7 @@ def build_target(cfg: TargetConfig) -> Target:
             api_key=api_key,
             temperature=cfg.temperature,
             max_tokens=cfg.max_tokens,
-            timeout_s=cfg.timeout_s,
+            timeout_s=request_timeout_s,
         )
 
     raise TargetError(f"unknown target type: {target_type!r}")

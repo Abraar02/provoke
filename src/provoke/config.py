@@ -32,8 +32,10 @@ class TargetConfig(BaseModel):
     api_key_env: str | None = None
     temperature: float = 0.0
     max_tokens: int = Field(default=512, gt=0)
-    timeout_s: float = Field(default=30.0, gt=0)
     mock_profile: Literal["secure", "moderate", "vulnerable"] = "moderate"
+    # NOTE: the per-request timeout is run.timeout_s (a single source of truth),
+    # applied to both the HTTP client and the engine. There is intentionally no
+    # target-level timeout to avoid the two-timeouts footgun.
 
     @field_validator("base_url")
     @classmethod

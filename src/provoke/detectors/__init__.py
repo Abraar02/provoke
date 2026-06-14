@@ -8,13 +8,24 @@ judge for each attempt without probes importing detector classes directly.
 from __future__ import annotations
 
 from provoke.detectors.base import Detector
+from provoke.detectors.compliance_token import ComplianceTokenDetector
 from provoke.detectors.refusal import RefusalDetector
 from provoke.detectors.string_match import StringMatchDetector
 
-__all__ = ["Detector", "RefusalDetector", "StringMatchDetector", "default_detectors"]
+__all__ = [
+    "Detector",
+    "RefusalDetector",
+    "StringMatchDetector",
+    "ComplianceTokenDetector",
+    "default_detectors",
+]
 
 
 def default_detectors() -> dict[str, Detector]:
     """Return a fresh name -> detector mapping of the built-ins."""
-    detectors: list[Detector] = [RefusalDetector(), StringMatchDetector()]
+    detectors: list[Detector] = [
+        RefusalDetector(),
+        StringMatchDetector(),
+        ComplianceTokenDetector(),
+    ]
     return {detector.name: detector for detector in detectors}

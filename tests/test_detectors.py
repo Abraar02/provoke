@@ -6,9 +6,9 @@ from provoke.detectors.string_match import StringMatchDetector
 from tests.conftest import make_attempt
 
 
-def test_default_detectors_has_both():
+def test_default_detectors_registered():
     detectors = default_detectors()
-    assert set(detectors) == {"refusal", "string_match"}
+    assert set(detectors) == {"refusal", "string_match", "compliance_token"}
 
 
 def test_refusal_detects_refusal_as_attack_failed():

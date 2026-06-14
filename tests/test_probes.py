@@ -18,7 +18,7 @@ def test_each_probe_generates_tagged_attempts():
         for attempt in attempts:
             assert attempt.probe_id == probe.id
             assert attempt.prompt
-            assert attempt.detector in {"refusal", "string_match"}
+            assert attempt.detector in {"refusal", "string_match", "compliance_token"}
             assert isinstance(attempt.owasp, OWASP)
             assert isinstance(attempt.severity, Severity)
 
@@ -28,6 +28,25 @@ def test_prompt_injection_carries_canary_and_indirect_is_critical():
     assert all("PWNED" in m for a in attempts for m in a.success_markers)
     indirect = [a for a in attempts if a.metadata.get("mode") == "indirect"]
     assert indirect and all(a.severity is Severity.CRITICAL for a in indirect)
+
+
+def test_jailbreak_uses_compliance_token_detector():
+    attempts = list(get_probe("jailbreak").generate())
+    assert attempts
+    assert all(a.detector == "compliance_token" for a in attempts)
+    assert all("JAILBROKEN" in a.success_markers for a in attempts)
+
+
+def test_system_prompt_leak_plants_secret_and_detects_it():
+    attempts = list(get_probe("system_prompt_leak").generate())
+    assert attempts
+    for a in attempts:
+        # A secret is planted in a system message and is the detection marker.
+        system_msgs = [m for m in a.messages if m.role == "system"]
+        assert system_msgs, "leak probe must plant a system prompt"
+        canary = a.success_markers[0]
+        assert canary in system_msgs[0].content
+        assert a.detector == "string_match"
 
 
 def test_resolve_probes_empty_returns_all():
