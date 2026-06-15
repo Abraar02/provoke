@@ -107,6 +107,8 @@ ollama pull deepseek-r1:7b
 provoke scan -c provoke.ollama.yaml
 ```
 
+📄 **Full report artifacts** (Markdown, JSON with the raw `<think>` traces, and SARIF) are committed under [`examples/`](examples/).
+
 ## Use it as a GitHub Action
 
 ```yaml
