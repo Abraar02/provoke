@@ -1,0 +1,17 @@
+.git
+.venv
+.github
+tests
+examples
+provoke-report
+provoke-benchmark
+*.yaml
+!pyproject.toml
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+dist
+build
+*.egg-info

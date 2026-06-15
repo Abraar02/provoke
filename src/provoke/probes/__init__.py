@@ -11,6 +11,7 @@ from provoke.probes import (  # noqa: F401
     agentic_tool_abuse,
     crescendo,
     jailbreak,
+    output_handling,
     prompt_injection,
     system_prompt_leak,
 )

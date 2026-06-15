@@ -16,7 +16,8 @@ Provoke fires a battery of adversarial probes at any LLM endpoint, scores the re
 - 🧠 **Reasoning-model aware** — strips `<think>` chain-of-thought before judging (tested on DeepSeek-R1)
 - 🎣 **Canary-based detection** — precise oracles, not brittle "did it refuse?" heuristics
 - 🚦 **CI security gate** — ASR thresholds **plus baseline regression diffing** (`provoke compare`)
-- 🔌 **Any OpenAI-compatible target** — OpenAI, Ollama, vLLM, … (+ an offline mock for hermetic tests)
+- 🔌 **Any target** — OpenAI-compatible (OpenAI, Ollama, vLLM, …) + **native Anthropic/Claude**; offline mock for hermetic tests
+- 📈 **Multi-model benchmark** — `provoke benchmark` tabulates ASR across models ("which is most robust?")
 - 📊 **SARIF · JSON · Markdown** reports — code-scanning alerts and PR comments
 
 > ⚖️ **Authorized testing only.** Provoke is a defensive tool for systems you own or are authorized to test. Probes measure *susceptibility* — e.g. whether the model emits a controlled, benign proof token under a jailbreak frame — and deliberately do **not** elicit harmful content.
@@ -32,6 +33,19 @@ Provoke fires a battery of adversarial probes at any LLM endpoint, scores the re
 | No pass/fail | Threshold **gate** that fails the build |
 | Findings live in a doc | **SARIF** alerts in the GitHub Security tab |
 | Hard-coded to one model | Pluggable **targets** (any OpenAI-compatible API) |
+
+## Install
+
+```bash
+# from source (works today) — provides the `provoke` CLI
+git clone https://github.com/Abraar02/provoke && cd provoke
+pip install -e ".[dev]"
+
+# or build the container
+docker build -t provoke . && docker run --rm provoke --help
+```
+
+A PyPI release (`pip install provoke-llm`) publishes via [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) on version tags — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ## Quickstart (no API key needed)
 
@@ -157,6 +171,22 @@ Baseline ASR 0% → current 38% (+38%)  —  REGRESSED
   ✗ regression prompt_injection:1 (prompt_injection): resisted → succeeded
 ```
 
+## Benchmark models (`provoke benchmark`)
+
+Run the whole probe suite across several targets and compare robustness — *which model resists best?*
+
+```bash
+provoke benchmark -c provoke.benchmark.yaml
+```
+
+| Model | Overall ASR | agentic_tool_abuse | crescendo | jailbreak | output_handling | prompt_injection | system_prompt_leak |
+|---|---|---|---|---|---|---|---|
+| secure-model | 0% | 0% | 0% | 0% | 0% | 0% | 0% |
+| moderate-model | 48% | 75% | 100% | 0% | 50% | 75% | 0% |
+| vulnerable-model | 100% | 100% | 100% | 100% | 100% | 100% | 100% |
+
+*(The example uses the offline mock at three robustness levels; point it at real `openai_compat` / `anthropic` targets to compare actual models.)*
+
 ## Architecture
 
 ```
@@ -174,12 +204,13 @@ Baseline ASR 0% → current 38% (+38%)  —  REGRESSED
                                                       ASR gate → exit code
 ```
 
-- **Targets** (`targets/`) — adapters to LLM endpoints. Built in: `mock` (offline), `openai_compat`.
+- **Targets** (`targets/`) — adapters to LLM endpoints. Built in: `mock` (offline), `openai_compat`, `anthropic` (native Messages API).
 - **Probes** (`probes/`) — attack generators that self-register and emit `Attempt`s tagged with OWASP/ATLAS. Payloads live in editable YAML under `data/payloads/`.
-- **Detectors** (`detectors/`) — judges that score a response: `string_match` (canary), `compliance_token` (must *lead with* the token — for jailbreak), `refusal` (heuristic). Chain-of-thought is stripped first (`reasoning.py`).
+- **Detectors** (`detectors/`) — judges that score a response: `string_match` (canary), `compliance_token` (must *lead with* the token — for jailbreak), `refusal` (heuristic), and `llm_judge` (opt-in, async — a model scores nuanced cases). Chain-of-thought is stripped first (`reasoning.py`).
 - **Engine** (`engine.py`) — bounded-concurrency async runner with retries, per-call timeouts, and **multi-turn conversations** (resends the growing transcript each turn).
 - **Reporting** (`reporting/`) — ASR aggregation, threshold gate, and JSON / Markdown / SARIF renderers.
 - **Compare** (`compare.py`) — baseline diffing: classifies each attempt as regression / improvement / new and gates CI on regressions.
+- **Benchmark** (`benchmark.py`) — runs the probe suite across many targets and renders a model-vs-probe ASR matrix.
 
 ## Add a probe (the contributor path)
 
@@ -204,10 +235,12 @@ register(MyProbe())
 
 - [x] Reasoning-model awareness — strip `<think>` chain-of-thought before judging
 - [x] Agentic / tool-abuse probe (OWASP LLM06 Excessive Agency)
-- [ ] LLM-as-judge detector (semantic success scoring) — pluggable, off by default for hermetic CI
+- [x] Insecure output-handling probe (OWASP LLM05 — markdown/HTML exfiltration)
+- [x] LLM-as-judge detector (opt-in, async)
 - [x] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
 - [x] Multi-turn / crescendo attacks
-- [ ] Anthropic + Bedrock native targets
+- [x] Native Anthropic/Claude target + multi-model benchmark (`provoke benchmark`)
+- [ ] Bedrock target; multi-turn detection per-turn; HTML report
 
 ## Security considerations
 

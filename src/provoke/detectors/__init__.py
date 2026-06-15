@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from provoke.detectors.base import Detector
 from provoke.detectors.compliance_token import ComplianceTokenDetector
+from provoke.detectors.llm_judge import LLMJudgeDetector
 from provoke.detectors.refusal import RefusalDetector
 from provoke.detectors.string_match import StringMatchDetector
 
@@ -17,6 +18,7 @@ __all__ = [
     "RefusalDetector",
     "StringMatchDetector",
     "ComplianceTokenDetector",
+    "LLMJudgeDetector",
     "default_detectors",
 ]
 

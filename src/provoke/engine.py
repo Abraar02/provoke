@@ -105,7 +105,13 @@ async def _evaluate(
             continue
 
         latency_ms = (time.perf_counter() - start) * 1000.0
-        succeeded, score = detector.evaluate(attempt, response)
+        # Detectors are sync by default; an LLM-as-judge detector exposes an
+        # async aevaluate (it calls a model), which the engine awaits.
+        aevaluate = getattr(detector, "aevaluate", None)
+        if aevaluate is not None:
+            succeeded, score = await aevaluate(attempt, response)
+        else:
+            succeeded, score = detector.evaluate(attempt, response)
         return Result(
             attempt=attempt,
             response=response,

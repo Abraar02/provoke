@@ -64,6 +64,23 @@ class _CountingTarget:
         return self._replies[min(self.calls, len(self._replies)) - 1]
 
 
+class _AsyncDetector:
+    name = "async_det"
+
+    async def aevaluate(self, attempt, response) -> tuple[bool, float]:
+        return ("win" in response, 1.0)
+
+    def evaluate(self, attempt, response) -> tuple[bool, float]:
+        raise NotImplementedError
+
+
+async def test_engine_awaits_async_detector():
+    target = ScriptedTarget("you win")
+    probe = _SingleAttemptProbe(make_attempt(detector="async_det"))
+    report = await run_scan(target, [probe], {"async_det": _AsyncDetector()})
+    assert report.results[0].succeeded
+
+
 async def test_engine_runs_multi_turn_conversation():
     from provoke.models import Attempt, Message
     from provoke.standards import OWASP, Atlas, Severity

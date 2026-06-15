@@ -25,6 +25,7 @@ probes:
   - system_prompt_leak
   - agentic_tool_abuse
   - crescendo
+  - output_handling
 
 run:
   concurrency: 5

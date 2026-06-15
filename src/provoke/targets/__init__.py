@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from provoke.targets.anthropic import DEFAULT_BASE_URL, AnthropicTarget
 from provoke.targets.base import Target, TargetError
 from provoke.targets.mock import MockTarget
 from provoke.targets.openai_compat import OpenAICompatTarget
@@ -12,7 +13,14 @@ from provoke.targets.openai_compat import OpenAICompatTarget
 if TYPE_CHECKING:
     from provoke.config import TargetConfig
 
-__all__ = ["Target", "TargetError", "MockTarget", "OpenAICompatTarget", "build_target"]
+__all__ = [
+    "Target",
+    "TargetError",
+    "MockTarget",
+    "OpenAICompatTarget",
+    "AnthropicTarget",
+    "build_target",
+]
 
 
 def build_target(cfg: TargetConfig, *, request_timeout_s: float = 30.0) -> Target:
@@ -44,6 +52,24 @@ def build_target(cfg: TargetConfig, *, request_timeout_s: float = 30.0) -> Targe
             base_url=base_url,
             model=model,
             api_key=api_key,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            timeout_s=request_timeout_s,
+        )
+
+    if target_type == "anthropic":
+        model = cfg.model
+        if not model:
+            raise TargetError("anthropic target requires 'model'")
+        api_key_env = cfg.api_key_env or "ANTHROPIC_API_KEY"
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise TargetError(f"environment variable '{api_key_env}' is not set")
+        return AnthropicTarget(
+            name=name,
+            model=model,
+            api_key=api_key,
+            base_url=cfg.base_url or DEFAULT_BASE_URL,
             temperature=cfg.temperature,
             max_tokens=cfg.max_tokens,
             timeout_s=request_timeout_s,

@@ -1,0 +1,28 @@
+# Benchmark several targets with the same probe suite and compare ASR.
+#
+# This example uses the offline mock at three robustness levels as stand-in
+# "models" so it runs with no API keys. Swap in real targets (openai_compat or
+# anthropic, each with a model + api_key_env) to compare actual models.
+#
+#   provoke benchmark -c provoke.benchmark.yaml
+
+targets:
+  - { type: mock, name: secure-model, mock_profile: secure }
+  - { type: mock, name: moderate-model, mock_profile: moderate }
+  - { type: mock, name: vulnerable-model, mock_profile: vulnerable }
+  # - { type: anthropic, name: claude-haiku, model: claude-haiku-4-5-20251001, api_key_env: ANTHROPIC_API_KEY }
+  # - { type: openai_compat, name: gpt-4o-mini, base_url: https://api.openai.com/v1, model: gpt-4o-mini, api_key_env: OPENAI_API_KEY }
+
+probes:
+  - jailbreak
+  - prompt_injection
+  - system_prompt_leak
+  - agentic_tool_abuse
+  - crescendo
+  - output_handling
+
+run:
+  concurrency: 5
+  timeout_s: 30
+
+output_dir: ./provoke-benchmark

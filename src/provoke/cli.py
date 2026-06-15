@@ -17,6 +17,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from provoke import __version__
+from provoke.benchmark import load_benchmark_config, render_matrix, run_benchmark
 from provoke.compare import (
     CompareError,
     ScanDiff,
@@ -25,7 +26,7 @@ from provoke.compare import (
     load_report,
 )
 from provoke.config import Config, ConfigError, ReportConfig, TargetConfig, load_config
-from provoke.detectors import default_detectors
+from provoke.detectors import LLMJudgeDetector, default_detectors
 from provoke.engine import run_scan
 from provoke.models import ScanReport
 from provoke.probes import all_probes, resolve_probes
@@ -55,6 +56,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_scan(args)
     if args.command == "compare":
         return _cmd_compare(args)
+    if args.command == "benchmark":
+        return _cmd_benchmark(args)
     if args.command == "list-probes":
         return _cmd_list_probes()
     parser.print_help()
@@ -80,6 +83,10 @@ def _build_parser() -> argparse.ArgumentParser:
     cmp.add_argument("-o", "--output", help="write the Markdown diff to this file")
     cmp.add_argument("--no-fail", action="store_true", help="always exit 0 even on regressions")
 
+    bench = sub.add_parser("benchmark", help="scan multiple targets and tabulate ASR")
+    bench.add_argument("-c", "--config", default="provoke.benchmark.yaml", help="benchmark config")
+    bench.add_argument("-o", "--output", help="output directory for benchmark.md")
+
     sub.add_parser("list-probes", help="list registered probes and their taxonomy")
     return parser
 
@@ -104,11 +111,16 @@ def _cmd_scan(args: argparse.Namespace) -> int:
         _err(f"setup error: {exc}")
         return 2
 
+    detectors = default_detectors()
+    if config.judge is not None:
+        judge_target = build_target(config.judge, request_timeout_s=config.run.timeout_s)
+        detectors["llm_judge"] = LLMJudgeDetector(judge_target)
+
     report = asyncio.run(
         run_scan(
             target,
             probes,
-            default_detectors(),
+            detectors,
             concurrency=config.run.concurrency,
             retries=config.run.retries,
             timeout_s=config.run.timeout_s,
@@ -257,6 +269,41 @@ def _print_summary(
     print(f"Overall ASR: {summary.asr:.0%} — {'PASSED' if passed else 'FAILED'}")
     for reason in reasons:
         print(f"  x {reason}")
+
+
+def _cmd_benchmark(args: argparse.Namespace) -> int:
+    try:
+        config = load_benchmark_config(args.config)
+    except ConfigError as exc:
+        _err(f"config error: {exc}")
+        return 2
+    try:
+        results = asyncio.run(run_benchmark(config))
+    except (TargetError, KeyError) as exc:
+        _err(f"benchmark error: {exc}")
+        return 2
+    output_dir = Path(args.output or config.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "benchmark.md"
+    path.write_text(render_matrix(results), encoding="utf-8")
+    _info(f"wrote benchmark -> {path}")
+    _print_matrix(results)
+    return 0
+
+
+def _print_matrix(results: list[tuple[str, Summary]]) -> None:
+    if _console is not None:
+        table = Table(title="Provoke benchmark — overall ASR (lower is more robust)")
+        table.add_column("Model")
+        table.add_column("Overall ASR", justify="right")
+        for name, summary in results:
+            style = "green" if summary.asr == 0 else ("yellow" if summary.asr < 0.30 else "red")
+            table.add_row(name, f"[{style}]{summary.asr:.0%}[/{style}]")
+        _console.print(table)
+        _console.print("Full per-probe matrix written to benchmark.md")
+        return
+    for name, summary in results:
+        print(f"  {name:24s} overall ASR={summary.asr:.0%}")
 
 
 def _cmd_list_probes() -> int:

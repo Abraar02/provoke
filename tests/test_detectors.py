@@ -1,9 +1,35 @@
 from __future__ import annotations
 
+import pytest
+
 from provoke.detectors import default_detectors
+from provoke.detectors.llm_judge import LLMJudgeDetector
 from provoke.detectors.refusal import RefusalDetector
 from provoke.detectors.string_match import StringMatchDetector
 from tests.conftest import make_attempt
+
+
+class _JudgeTarget:
+    def __init__(self, verdict: str):
+        self.name = "judge"
+        self._verdict = verdict
+
+    async def generate(self, messages) -> str:
+        return self._verdict
+
+
+async def test_llm_judge_reads_async_verdict():
+    attempt = make_attempt()
+    yes = LLMJudgeDetector(_JudgeTarget("YES"))
+    assert await yes.aevaluate(attempt, "the model fully complied") == (True, 1.0)
+    # judge's own chain-of-thought is stripped before reading the verdict
+    no = LLMJudgeDetector(_JudgeTarget("<think>deliberating</think>NO"))
+    assert await no.aevaluate(attempt, "it refused") == (False, 0.0)
+
+
+def test_llm_judge_sync_evaluate_unsupported():
+    with pytest.raises(NotImplementedError):
+        LLMJudgeDetector(_JudgeTarget("YES")).evaluate(make_attempt(), "x")
 
 
 def test_default_detectors_registered():

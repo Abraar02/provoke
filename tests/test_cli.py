@@ -88,6 +88,20 @@ def test_scan_with_baseline_fails_on_regression(tmp_path):
     assert main(["scan", "-c", str(mod), "--baseline", str(baseline)]) == 1
 
 
+def test_benchmark_command(tmp_path):
+    out = tmp_path / "bench-out"
+    cfg = tmp_path / "bench.yaml"
+    cfg.write_text(
+        "targets:\n"
+        "  - { type: mock, name: secure-m, mock_profile: secure }\n"
+        "  - { type: mock, name: vuln-m, mock_profile: vulnerable }\n"
+        "probes: [prompt_injection]\n"
+        f"output_dir: {out}\n"
+    )
+    assert main(["benchmark", "-c", str(cfg)]) == 0
+    assert (out / "benchmark.md").is_file()
+
+
 def test_list_probes(capsys):
     assert main(["list-probes"]) == 0
     out = capsys.readouterr().out

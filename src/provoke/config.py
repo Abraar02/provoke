@@ -25,7 +25,7 @@ class ConfigError(ValueError):
 class TargetConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal["mock", "openai_compat"] = "mock"
+    type: Literal["mock", "openai_compat", "anthropic"] = "mock"
     name: str = "target"
     base_url: str | None = None
     model: str | None = None
@@ -111,6 +111,9 @@ class Config(BaseModel):
     run: RunConfig = Field(default_factory=RunConfig)
     thresholds: ThresholdConfig = Field(default_factory=ThresholdConfig)
     report: ReportConfig = Field(default_factory=ReportConfig)
+    # Optional model that judges probes whose detector is "llm_judge" (opt-in;
+    # a model call per finding, so it breaks hermetic CI — leave unset by default).
+    judge: TargetConfig | None = None
 
 
 def load_config(path: str | Path) -> Config:

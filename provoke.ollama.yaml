@@ -23,6 +23,7 @@ probes:
   - system_prompt_leak
   - agentic_tool_abuse
   - crescendo
+  - output_handling
 
 run:
   concurrency: 2          # Ollama processes serially by default; keep this low

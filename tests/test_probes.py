@@ -14,7 +14,15 @@ def test_core_probes_registered():
         "system_prompt_leak",
         "agentic_tool_abuse",
         "crescendo",
+        "output_handling",
     } <= ids
+
+
+def test_output_handling_targets_exfil_domain():
+    attempts = list(get_probe("output_handling").generate())
+    assert attempts
+    assert all(a.owasp is OWASP.LLM05 for a in attempts)
+    assert all(a.success_markers == ("attacker-exfil.test",) for a in attempts)
 
 
 def test_crescendo_is_multi_turn_with_followups():

@@ -3,7 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "provoke"
+# Distribution name on PyPI ("provoke" was taken); the import package and CLI
+# are still `provoke`.
+name = "provoke-llm"
 version = "0.1.0"
 description = "Continuous adversarial red-teaming for LLM applications, built to gate CI."
 readme = "README.md"
