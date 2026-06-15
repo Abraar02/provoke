@@ -3,14 +3,23 @@
 **Continuous adversarial red-teaming for LLM applications — built to run in CI as a security gate.**
 
 [![CI](https://github.com/Abraar02/provoke/actions/workflows/ci.yml/badge.svg)](https://github.com/Abraar02/provoke/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Python](https://img.shields.io/badge/python-3.11%E2%80%933.13-blue)
+![Tests](https://img.shields.io/badge/tests-73%20passing-brightgreen)
+![Types](https://img.shields.io/badge/mypy-strict-blue)
+![Lint](https://img.shields.io/badge/lint-ruff-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Most teams red-team their LLM features once, by hand, right before launch — then ship changes to prompts, models, and tools every week with no regression coverage. Provoke turns LLM red-teaming into an **automated, repeatable check**: it fires a battery of adversarial probes at any LLM endpoint, scores the responses, and **fails your build** when the attack-success-rate (ASR) crosses a threshold you set.
+Provoke fires a battery of adversarial probes at any LLM endpoint, scores the responses with **reasoning-aware** detectors, and **fails your CI build** when the attack-success-rate (ASR) crosses a threshold — or when a change *regresses* against a saved baseline. Findings map to the **[OWASP Top 10 for LLM Apps (2025)](https://genai.owasp.org/)** + **[MITRE ATLAS](https://atlas.mitre.org/)** and export as **SARIF** for the GitHub Security tab.
 
-It maps every finding to the **[OWASP Top 10 for LLM Applications (2025)](https://genai.owasp.org/)** and **[MITRE ATLAS](https://atlas.mitre.org/)**, and emits **SARIF** so vulnerabilities show up in the GitHub Security tab next to your SAST alerts.
+### Highlights
+- 🎯 **4 attack classes** — prompt injection (direct + indirect), jailbreak, system-prompt leak, **agentic tool-abuse** (LLM06)
+- 🧠 **Reasoning-model aware** — strips `<think>` chain-of-thought before judging (tested on DeepSeek-R1)
+- 🎣 **Canary-based detection** — precise oracles, not brittle "did it refuse?" heuristics
+- 🚦 **CI security gate** — ASR thresholds **plus baseline regression diffing** (`provoke compare`)
+- 🔌 **Any OpenAI-compatible target** — OpenAI, Ollama, vLLM, … (+ an offline mock for hermetic tests)
+- 📊 **SARIF · JSON · Markdown** reports — code-scanning alerts and PR comments
 
-> ⚖️ **Authorized testing only.** Provoke is a defensive tool for systems you own or are authorized to test. The bundled jailbreak probes measure *susceptibility to safety-bypass framing* (judged by whether the model refuses) and deliberately do **not** try to extract harmful content.
+> ⚖️ **Authorized testing only.** Provoke is a defensive tool for systems you own or are authorized to test. Probes measure *susceptibility* — e.g. whether the model emits a controlled, benign proof token under a jailbreak frame — and deliberately do **not** elicit harmful content.
 
 ---
 
@@ -19,7 +28,7 @@ It maps every finding to the **[OWASP Top 10 for LLM Applications (2025)](https:
 | One-off manual testing | Provoke |
 |---|---|
 | Run once, by hand, pre-launch | Runs on every PR / nightly in CI |
-| "I jailbroke it" screenshot | Quantified ASR per OWASP category, trended over time |
+| "I jailbroke it" screenshot | Quantified ASR per OWASP category, diffed against a baseline |
 | No pass/fail | Threshold **gate** that fails the build |
 | Findings live in a doc | **SARIF** alerts in the GitHub Security tab |
 | Hard-coded to one model | Pluggable **targets** (any OpenAI-compatible API) |
@@ -165,7 +174,7 @@ Baseline ASR 0% → current 38% (+38%)  —  REGRESSED
 
 - **Targets** (`targets/`) — adapters to LLM endpoints. Built in: `mock` (offline), `openai_compat`.
 - **Probes** (`probes/`) — attack generators that self-register and emit `Attempt`s tagged with OWASP/ATLAS. Payloads live in editable YAML under `data/payloads/`.
-- **Detectors** (`detectors/`) — judges that score a response: `refusal`, `string_match` (canary).
+- **Detectors** (`detectors/`) — judges that score a response: `string_match` (canary), `compliance_token` (must *lead with* the token — for jailbreak), `refusal` (heuristic). Chain-of-thought is stripped first (`reasoning.py`).
 - **Engine** (`engine.py`) — bounded-concurrency async runner with retries and per-call timeouts.
 - **Reporting** (`reporting/`) — ASR aggregation, threshold gate, and JSON / Markdown / SARIF renderers.
 - **Compare** (`compare.py`) — baseline diffing: classifies each attempt as regression / improvement / new and gates CI on regressions.
@@ -184,7 +193,8 @@ class MyProbe:
             yield Attempt(probe_id=self.id, index=i, technique=p["technique"],
                           messages=(Message("user", p["prompt"]),),
                           owasp=OWASP.LLM01, atlas=Atlas.PROMPT_INJECTION,
-                          severity=Severity.HIGH, detector="refusal")
+                          severity=Severity.HIGH, detector="string_match",
+                          success_markers=("CANARY",))
 register(MyProbe())
 ```
 
