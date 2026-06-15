@@ -63,6 +63,31 @@ def test_invalid_format_override_returns_usage_error(tmp_path):
     assert main(["scan", "-c", str(cfg), "--format", "not_a_real_format"]) == 2
 
 
+def test_compare_detects_regression(tmp_path):
+    def run(profile: str, out: Path) -> Path:
+        cfg = tmp_path / f"{profile}.yaml"
+        cfg.write_text(_MOCK_CONFIG.format(profile=profile, output=out))
+        main(["scan", "-c", str(cfg), "--no-fail"])
+        return out / "provoke.json"
+
+    baseline = run("secure", tmp_path / "base")     # all resisted
+    current = run("moderate", tmp_path / "curr")     # indirect injection succeeds
+    assert main(["compare", str(baseline), str(current)]) == 1   # regressions -> exit 1
+    assert main(["compare", str(baseline), str(baseline)]) == 0  # identical -> no regressions
+
+
+def test_scan_with_baseline_fails_on_regression(tmp_path):
+    sec = tmp_path / "secure.yaml"
+    sec.write_text(_MOCK_CONFIG.format(profile="secure", output=tmp_path / "base"))
+    main(["scan", "-c", str(sec), "--no-fail"])
+    baseline = tmp_path / "base" / "provoke.json"
+
+    mod = tmp_path / "moderate.yaml"
+    mod.write_text(_MOCK_CONFIG.format(profile="moderate", output=tmp_path / "curr"))
+    # moderate regresses vs the secure baseline -> exit 1
+    assert main(["scan", "-c", str(mod), "--baseline", str(baseline)]) == 1
+
+
 def test_list_probes(capsys):
     assert main(["list-probes"]) == 0
     out = capsys.readouterr().out

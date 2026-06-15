@@ -123,6 +123,29 @@ provoke scan -c provoke.ollama.yaml
 
 The action runs the scan, writes the Markdown summary to the job summary, and uploads SARIF to code scanning.
 
+## Catch regressions (`provoke compare`)
+
+An absolute ASR gate asks *"is it secure enough now?"* A **baseline diff** asks *"did this change make it worse?"* — which is what catches a model swap or a prompt edit silently re-opening a hole.
+
+```bash
+# save a baseline once
+provoke scan -c provoke.yaml -o baseline
+
+# on every PR: scan and fail only on NEW regressions vs the baseline
+provoke scan -c provoke.yaml --baseline baseline/provoke.json
+
+# ...or diff two existing reports directly
+provoke compare baseline/provoke.json provoke-report/provoke.json
+```
+
+A **regression** = an attempt that was *resisted in the baseline but succeeds now* → exit 1. Improvements and brand-new findings are reported too:
+
+```
+Baseline ASR 0% → current 38% (+38%)  —  REGRESSED
+  ✗ regression agentic_tool_abuse:0 (agentic_tool_abuse): resisted → succeeded
+  ✗ regression prompt_injection:1 (prompt_injection): resisted → succeeded
+```
+
 ## Architecture
 
 ```
@@ -145,6 +168,7 @@ The action runs the scan, writes the Markdown summary to the job summary, and up
 - **Detectors** (`detectors/`) — judges that score a response: `refusal`, `string_match` (canary).
 - **Engine** (`engine.py`) — bounded-concurrency async runner with retries and per-call timeouts.
 - **Reporting** (`reporting/`) — ASR aggregation, threshold gate, and JSON / Markdown / SARIF renderers.
+- **Compare** (`compare.py`) — baseline diffing: classifies each attempt as regression / improvement / new and gates CI on regressions.
 
 ## Add a probe (the contributor path)
 
@@ -169,8 +193,8 @@ register(MyProbe())
 - [x] Reasoning-model awareness — strip `<think>` chain-of-thought before judging
 - [x] Agentic / tool-abuse probe (OWASP LLM06 Excessive Agency)
 - [ ] LLM-as-judge detector (semantic success scoring) — pluggable, off by default for hermetic CI
+- [x] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
 - [ ] Multi-turn / crescendo attacks
-- [ ] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
 - [ ] Anthropic + Bedrock native targets
 
 ## Security considerations

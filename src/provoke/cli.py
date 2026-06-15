@@ -1,8 +1,8 @@
-"""Command-line interface: `provoke scan` and `provoke list-probes`.
+"""Command-line interface: `provoke scan`, `provoke compare`, `provoke list-probes`.
 
 Exit codes:
-  0  scan ran and the gate passed (or --no-fail was set)
-  1  scan ran but the gate failed (ASR over threshold) — fail the CI build
+  0  ran and the gate passed (or --no-fail was set)
+  1  gate failed — ASR over threshold, or a regression vs the baseline — fail CI
   2  usage / configuration error
 """
 
@@ -10,12 +10,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from provoke import __version__
+from provoke.compare import (
+    CompareError,
+    ScanDiff,
+    diff_reports,
+    evaluate_compare_gate,
+    load_report,
+)
 from provoke.config import Config, ConfigError, ReportConfig, TargetConfig, load_config
 from provoke.detectors import default_detectors
 from provoke.engine import run_scan
@@ -28,6 +36,7 @@ from provoke.reporting import (
     render_report,
     summarize,
 )
+from provoke.reporting.diff_reporter import render_diff
 from provoke.targets import TargetError, build_target
 
 try:
@@ -44,6 +53,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "scan":
         return _cmd_scan(args)
+    if args.command == "compare":
+        return _cmd_compare(args)
     if args.command == "list-probes":
         return _cmd_list_probes()
     parser.print_help()
@@ -60,7 +71,14 @@ def _build_parser() -> argparse.ArgumentParser:
     scan.add_argument("-o", "--output", help="override report output directory")
     scan.add_argument("--format", help="comma-separated formats (markdown,json,sarif)")
     scan.add_argument("--profile", help="override mock target profile")
+    scan.add_argument("--baseline", help="JSON report to diff against; fail on regressions")
     scan.add_argument("--no-fail", action="store_true", help="always exit 0 even if the gate fails")
+
+    cmp = sub.add_parser("compare", help="diff a current JSON report against a baseline")
+    cmp.add_argument("baseline", help="path to the baseline JSON report")
+    cmp.add_argument("current", help="path to the current JSON report")
+    cmp.add_argument("-o", "--output", help="write the Markdown diff to this file")
+    cmp.add_argument("--no-fail", action="store_true", help="always exit 0 even on regressions")
 
     sub.add_parser("list-probes", help="list registered probes and their taxonomy")
     return parser
@@ -102,9 +120,63 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     _write_reports(config, report, summary, passed, source_uri=args.config)
     _print_summary(report, summary, passed, reasons)
 
+    regressed = False
+    if args.baseline:
+        try:
+            baseline = load_report(args.baseline)
+        except CompareError as exc:
+            _err(f"baseline error: {exc}")
+            return 2
+        current_json = json.loads(render_report("json", report, summary))
+        diff = diff_reports(baseline, current_json)
+        cmp_passed, _ = evaluate_compare_gate(diff)
+        regressed = not cmp_passed
+        _print_diff(diff, cmp_passed)
+
+    if (not passed or regressed) and not args.no_fail:
+        return 1
+    return 0
+
+
+def _cmd_compare(args: argparse.Namespace) -> int:
+    try:
+        baseline = load_report(args.baseline)
+        current = load_report(args.current)
+    except CompareError as exc:
+        _err(f"compare error: {exc}")
+        return 2
+    diff = diff_reports(baseline, current)
+    passed, _ = evaluate_compare_gate(diff)
+    if args.output:
+        Path(args.output).write_text(render_diff(diff, gate_passed=passed), encoding="utf-8")
+        _info(f"wrote diff -> {args.output}")
+    _print_diff(diff, passed)
     if not passed and not args.no_fail:
         return 1
     return 0
+
+
+def _print_diff(diff: ScanDiff, passed: bool) -> None:
+    delta = diff.current_asr - diff.baseline_asr
+    if _console is not None:
+        verdict = "[green]NO REGRESSIONS[/green]" if passed else "[red]REGRESSED[/red]"
+        _console.print(
+            f"Baseline ASR {diff.baseline_asr:.0%} → current {diff.current_asr:.0%} "
+            f"({delta:+.0%})  —  {verdict}"
+        )
+        for d in diff.regressions:
+            _console.print(
+                f"  [red]✗ regression[/red] {d.id} ({d.probe}): {d.baseline} → {d.current}"
+            )
+        for d in diff.new_findings:
+            _console.print(f"  [yellow]! new finding[/yellow] {d.id} ({d.probe})")
+        for d in diff.improvements:
+            _console.print(f"  [green]✓ fixed[/green] {d.id} ({d.probe})")
+        return
+    print(f"Baseline ASR {diff.baseline_asr:.0%} -> current {diff.current_asr:.0%} "
+          f"({delta:+.0%}) - {'NO REGRESSIONS' if passed else 'REGRESSED'}")
+    for d in diff.regressions:
+        print(f"  x regression {d.id} ({d.probe}): {d.baseline} -> {d.current}")
 
 
 def _apply_overrides(config: Config, args: argparse.Namespace) -> Config:
