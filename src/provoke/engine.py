@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 
 from provoke.detectors.base import Detector
-from provoke.models import Attempt, Result, ScanReport
+from provoke.models import Attempt, Message, Result, ScanReport
 from provoke.probes.base import Probe
 from provoke.targets.base import Target
 
@@ -96,9 +96,7 @@ async def _evaluate(
     for _ in range(max(1, retries + 1)):
         start = time.perf_counter()
         try:
-            response = await asyncio.wait_for(
-                target.generate(attempt.messages), timeout=timeout_s
-            )
+            response = await _produce(target, attempt, timeout_s)
         except TimeoutError:
             last_error = f"timed out after {timeout_s}s"
             continue
@@ -125,3 +123,24 @@ async def _evaluate(
         detector=attempt.detector,
         error=last_error,
     )
+
+
+async def _produce(target: Target, attempt: Attempt, timeout_s: float) -> str:
+    """Run the attempt and return the assistant text to judge.
+
+    Single-shot: the model's reply. Multi-turn: each user turn is sent in
+    sequence, after appending the model's real reply, and the joined transcript
+    of assistant replies is judged — so a canary emitted on ANY turn counts.
+    Targets are stateless, so the full growing conversation is resent each turn.
+    """
+    conversation = list(attempt.messages)
+    response = await asyncio.wait_for(target.generate(conversation), timeout=timeout_s)
+    if not attempt.follow_ups:
+        return response
+
+    transcript = [response]
+    for follow_up in attempt.follow_ups:
+        conversation = [*conversation, Message("assistant", response), Message("user", follow_up)]
+        response = await asyncio.wait_for(target.generate(conversation), timeout=timeout_s)
+        transcript.append(response)
+    return "\n---\n".join(transcript)

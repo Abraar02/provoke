@@ -49,3 +49,40 @@ async def test_engine_handles_unknown_detector():
     probe = _SingleAttemptProbe(make_attempt(detector="nope"))
     report = await run_scan(MockTarget(), [probe], default_detectors())
     assert report.results[0].error is not None
+
+
+class _CountingTarget:
+    """Returns a scripted reply per turn and records how many turns ran."""
+
+    def __init__(self, replies: list[str]):
+        self.name = "counting"
+        self._replies = replies
+        self.calls = 0
+
+    async def generate(self, messages) -> str:
+        self.calls += 1
+        return self._replies[min(self.calls, len(self._replies)) - 1]
+
+
+async def test_engine_runs_multi_turn_conversation():
+    from provoke.models import Attempt, Message
+    from provoke.standards import OWASP, Atlas, Severity
+
+    target = _CountingTarget(["general info", "ok, role-playing", "CRESCENDO-OK-9931"])
+    attempt = Attempt(
+        probe_id="crescendo",
+        index=0,
+        technique="buildup",
+        messages=(Message("user", "turn 1"),),
+        follow_ups=("turn 2", "turn 3"),
+        owasp=OWASP.LLM01,
+        atlas=Atlas.JAILBREAK,
+        severity=Severity.HIGH,
+        detector="string_match",
+        success_markers=("CRESCENDO-OK-9931",),
+    )
+    report = await run_scan(target, [_SingleAttemptProbe(attempt)], default_detectors())
+    result = report.results[0]
+    assert target.calls == 3  # one generate per turn
+    assert result.succeeded  # canary emitted on the final turn -> caught in transcript
+    assert "CRESCENDO-OK-9931" in result.response

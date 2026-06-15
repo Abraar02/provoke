@@ -40,11 +40,18 @@ class Attempt:
     severity: Severity
     detector: str
     success_markers: tuple[str, ...] = ()
+    # Additional user turns sent one at a time AFTER `messages`, each appended
+    # to the conversation along with the model's real reply. Empty = single-shot.
+    follow_ups: tuple[str, ...] = ()
     metadata: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def id(self) -> str:
         return f"{self.probe_id}:{self.index}"
+
+    @property
+    def is_multi_turn(self) -> bool:
+        return bool(self.follow_ups)
 
     @property
     def prompt(self) -> str:

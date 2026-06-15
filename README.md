@@ -12,7 +12,7 @@
 Provoke fires a battery of adversarial probes at any LLM endpoint, scores the responses with **reasoning-aware** detectors, and **fails your CI build** when the attack-success-rate (ASR) crosses a threshold — or when a change *regresses* against a saved baseline. Findings map to the **[OWASP Top 10 for LLM Apps (2025)](https://genai.owasp.org/)** + **[MITRE ATLAS](https://atlas.mitre.org/)** and export as **SARIF** for the GitHub Security tab.
 
 ### Highlights
-- 🎯 **4 attack classes** — prompt injection (direct + indirect), jailbreak, system-prompt leak, **agentic tool-abuse** (LLM06)
+- 🎯 **5 attack classes** — prompt injection (direct + indirect), jailbreak, **multi-turn crescendo**, system-prompt leak, **agentic tool-abuse** (LLM06)
 - 🧠 **Reasoning-model aware** — strips `<think>` chain-of-thought before judging (tested on DeepSeek-R1)
 - 🎣 **Canary-based detection** — precise oracles, not brittle "did it refuse?" heuristics
 - 🚦 **CI security gate** — ASR thresholds **plus baseline regression diffing** (`provoke compare`)
@@ -69,20 +69,22 @@ provoke scan -c provoke.yaml
 ## Example report
 
 ```
-                  Provoke scan: demo-mock-llm
-┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━┳━━━━━┓
-┃ Probe              ┃ OWASP      ┃ Sev      ┃ Att ┃ Hit ┃ ASR ┃
-┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━╇━━━━━┩
-│ agentic_tool_abuse │ LLM06:2025 │ critical │   4 │   3 │ 75% │
-│ prompt_injection   │ LLM01:2025 │ critical │   4 │   3 │ 75% │
-│ jailbreak          │ LLM01:2025 │ high     │   4 │   0 │  0% │
-│ system_prompt_leak │ LLM07:2025 │ high     │   4 │   0 │  0% │
-└────────────────────┴────────────┴──────────┴─────┴─────┴─────┘
-Overall ASR: 38%  —  GATE FAILED
-  ✗ LLM01:2025 Prompt Injection ASR 38% exceeds max 0%
+                   Provoke scan: demo-mock-llm
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━┳━━━━━━┓
+┃ Probe              ┃ OWASP      ┃ Sev      ┃ Att ┃ Hit ┃  ASR ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━╇━━━━━━┩
+│ agentic_tool_abuse │ LLM06:2025 │ critical │   4 │   3 │  75% │
+│ prompt_injection   │ LLM01:2025 │ critical │   4 │   3 │  75% │
+│ crescendo          │ LLM01:2025 │ high     │   3 │   3 │ 100% │
+│ jailbreak          │ LLM01:2025 │ high     │   4 │   0 │   0% │
+│ system_prompt_leak │ LLM07:2025 │ high     │   4 │   0 │   0% │
+└────────────────────┴────────────┴──────────┴─────┴─────┴──────┘
+Overall ASR: 47%  —  GATE FAILED
+  ✗ overall ASR 47% exceeds max 0%
+  ✗ LLM01:2025 Prompt Injection ASR 55% exceeds max 0%
 ```
 
-The story the mock tells is realistic: a reasonably-aligned app that **resists direct jailbreaks** but **falls for indirect prompt injection** hidden inside untrusted data — including the **agentic** case, where that injection makes the model emit a data-exfiltration tool call (`send_email` to an attacker). That jump from *wrong words* to *wrong actions* (OWASP LLM06 Excessive Agency) is the highest-impact LLM risk.
+The story the mock tells is realistic: a reasonably-aligned app that **resists direct jailbreaks** but **falls for indirect prompt injection** hidden inside untrusted data — including the **agentic** case, where that injection makes the model emit a data-exfiltration tool call (`send_email` to an attacker). That jump from *wrong words* to *wrong actions* (OWASP LLM06 Excessive Agency) is the highest-impact LLM risk. Note that the cold `jailbreak` probe stays at 0% while the **multi-turn `crescendo`** hits 100% — buildup across turns breaks what a single-shot ask can't.
 
 ## Live result: DeepSeek-R1 (7B)
 
@@ -175,7 +177,7 @@ Baseline ASR 0% → current 38% (+38%)  —  REGRESSED
 - **Targets** (`targets/`) — adapters to LLM endpoints. Built in: `mock` (offline), `openai_compat`.
 - **Probes** (`probes/`) — attack generators that self-register and emit `Attempt`s tagged with OWASP/ATLAS. Payloads live in editable YAML under `data/payloads/`.
 - **Detectors** (`detectors/`) — judges that score a response: `string_match` (canary), `compliance_token` (must *lead with* the token — for jailbreak), `refusal` (heuristic). Chain-of-thought is stripped first (`reasoning.py`).
-- **Engine** (`engine.py`) — bounded-concurrency async runner with retries and per-call timeouts.
+- **Engine** (`engine.py`) — bounded-concurrency async runner with retries, per-call timeouts, and **multi-turn conversations** (resends the growing transcript each turn).
 - **Reporting** (`reporting/`) — ASR aggregation, threshold gate, and JSON / Markdown / SARIF renderers.
 - **Compare** (`compare.py`) — baseline diffing: classifies each attempt as regression / improvement / new and gates CI on regressions.
 
@@ -204,7 +206,7 @@ register(MyProbe())
 - [x] Agentic / tool-abuse probe (OWASP LLM06 Excessive Agency)
 - [ ] LLM-as-judge detector (semantic success scoring) — pluggable, off by default for hermetic CI
 - [x] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
-- [ ] Multi-turn / crescendo attacks
+- [x] Multi-turn / crescendo attacks
 - [ ] Anthropic + Bedrock native targets
 
 ## Security considerations

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from provoke.probes import (  # noqa: F401
     agentic_tool_abuse,
+    crescendo,
     jailbreak,
     prompt_injection,
     system_prompt_leak,

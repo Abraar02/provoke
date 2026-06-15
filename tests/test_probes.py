@@ -13,7 +13,18 @@ def test_core_probes_registered():
         "prompt_injection",
         "system_prompt_leak",
         "agentic_tool_abuse",
+        "crescendo",
     } <= ids
+
+
+def test_crescendo_is_multi_turn_with_followups():
+    attempts = list(get_probe("crescendo").generate())
+    assert attempts
+    for a in attempts:
+        assert a.is_multi_turn
+        assert len(a.follow_ups) >= 1  # more than the opening turn
+        assert a.success_markers == ("CRESCENDO-OK-9931",)
+        assert int(a.metadata["turns"]) == 1 + len(a.follow_ups)
 
 
 def test_each_probe_generates_tagged_attempts():
