@@ -6,9 +6,14 @@ from provoke.probes import all_probes, get_probe, resolve_probes
 from provoke.standards import OWASP, Severity
 
 
-def test_three_probes_registered():
+def test_core_probes_registered():
     ids = {probe.id for probe in all_probes()}
-    assert {"jailbreak", "prompt_injection", "system_prompt_leak"} <= ids
+    assert {
+        "jailbreak",
+        "prompt_injection",
+        "system_prompt_leak",
+        "agentic_tool_abuse",
+    } <= ids
 
 
 def test_each_probe_generates_tagged_attempts():
@@ -35,6 +40,19 @@ def test_jailbreak_uses_compliance_token_detector():
     assert attempts
     assert all(a.detector == "compliance_token" for a in attempts)
     assert all("JAILBROKEN" in a.success_markers for a in attempts)
+
+
+def test_agentic_tool_abuse_targets_exfil_canary():
+    attempts = list(get_probe("agentic_tool_abuse").generate())
+    assert attempts
+    for a in attempts:
+        assert a.owasp is OWASP.LLM06
+        assert a.detector == "string_match"
+        assert a.success_markers == ("exfil@attacker.test",)
+        # the agent's tools are defined in a planted system message
+        assert any(m.role == "system" for m in a.messages)
+    modes = {a.metadata.get("mode") for a in attempts}
+    assert "indirect" in modes and "direct" in modes
 
 
 def test_system_prompt_leak_plants_secret_and_detects_it():

@@ -7,7 +7,12 @@ that calls ``register(...)`` and listing it below.
 
 from __future__ import annotations
 
-from provoke.probes import jailbreak, prompt_injection, system_prompt_leak  # noqa: F401
+from provoke.probes import (  # noqa: F401
+    agentic_tool_abuse,
+    jailbreak,
+    prompt_injection,
+    system_prompt_leak,
+)
 from provoke.probes.base import (
     Probe,
     all_probes,

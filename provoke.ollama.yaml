@@ -21,6 +21,7 @@ probes:
   - jailbreak
   - prompt_injection
   - system_prompt_leak
+  - agentic_tool_abuse
 
 run:
   concurrency: 2          # Ollama processes serially by default; keep this low

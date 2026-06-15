@@ -23,6 +23,7 @@ probes:
   - jailbreak
   - prompt_injection
   - system_prompt_leak
+  - agentic_tool_abuse
 
 run:
   concurrency: 5

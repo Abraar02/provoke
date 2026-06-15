@@ -60,19 +60,20 @@ provoke scan -c provoke.yaml
 ## Example report
 
 ```
-       Provoke scan: demo-mock-llm
-┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━┳━━━━━┳━━━━━┳━━━━━━┓
-┃ Probe             ┃ OWASP  ┃ Sev ┃ Att ┃ Hit ┃ ASR  ┃
-┡━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━╇━━━━━╇━━━━━╇━━━━━━┩
-│ prompt_injection  │ LLM01  │ crit│   4 │   3 │  75% │
-│ jailbreak         │ LLM01  │ high│   4 │   0 │   0% │
-│ system_prompt_leak│ LLM07  │ high│   4 │   0 │   0% │
-└───────────────────┴────────┴─────┴─────┴─────┴──────┘
-Overall ASR: 25%  —  GATE FAILED
+                  Provoke scan: demo-mock-llm
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━┳━━━━━┓
+┃ Probe              ┃ OWASP      ┃ Sev      ┃ Att ┃ Hit ┃ ASR ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━╇━━━━━┩
+│ agentic_tool_abuse │ LLM06:2025 │ critical │   4 │   3 │ 75% │
+│ prompt_injection   │ LLM01:2025 │ critical │   4 │   3 │ 75% │
+│ jailbreak          │ LLM01:2025 │ high     │   4 │   0 │  0% │
+│ system_prompt_leak │ LLM07:2025 │ high     │   4 │   0 │  0% │
+└────────────────────┴────────────┴──────────┴─────┴─────┴─────┘
+Overall ASR: 38%  —  GATE FAILED
   ✗ LLM01:2025 Prompt Injection ASR 38% exceeds max 0%
 ```
 
-The story the mock tells is realistic: a reasonably-aligned app that **resists direct jailbreaks** but **falls for indirect prompt injection** hidden inside untrusted data — the single most important LLM-app vulnerability class today.
+The story the mock tells is realistic: a reasonably-aligned app that **resists direct jailbreaks** but **falls for indirect prompt injection** hidden inside untrusted data — including the **agentic** case, where that injection makes the model emit a data-exfiltration tool call (`send_email` to an attacker). That jump from *wrong words* to *wrong actions* (OWASP LLM06 Excessive Agency) is the highest-impact LLM risk.
 
 ## Live result: DeepSeek-R1 (7B)
 
@@ -165,8 +166,9 @@ register(MyProbe())
 
 ## Roadmap
 
+- [x] Reasoning-model awareness — strip `<think>` chain-of-thought before judging
+- [x] Agentic / tool-abuse probe (OWASP LLM06 Excessive Agency)
 - [ ] LLM-as-judge detector (semantic success scoring) — pluggable, off by default for hermetic CI
-- [ ] Agentic / tool-abuse probes (OWASP LLM06 Excessive Agency)
 - [ ] Multi-turn / crescendo attacks
 - [ ] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
 - [ ] Anthropic + Bedrock native targets
