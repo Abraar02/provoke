@@ -102,6 +102,11 @@ def test_benchmark_command(tmp_path):
     assert (out / "benchmark.md").is_file()
 
 
+def test_discover_requires_judge_model(tmp_path):
+    cfg = _write_config(tmp_path, "secure")  # no `judge:` configured
+    assert main(["discover", "-c", str(cfg)]) == 2
+
+
 def test_list_probes(capsys):
     assert main(["list-probes"]) == 0
     out = capsys.readouterr().out

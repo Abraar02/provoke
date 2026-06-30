@@ -12,12 +12,13 @@
 Provoke fires a battery of adversarial probes at any LLM endpoint, scores the responses with **reasoning-aware** detectors, and **fails your CI build** when the attack-success-rate (ASR) crosses a threshold — or when a change *regresses* against a saved baseline. Findings map to the **[OWASP Top 10 for LLM Apps (2025)](https://genai.owasp.org/)** + **[MITRE ATLAS](https://atlas.mitre.org/)** and export as **SARIF** for the GitHub Security tab.
 
 ### Highlights
-- 🎯 **5 attack classes** — prompt injection (direct + indirect), jailbreak, **multi-turn crescendo**, system-prompt leak, **agentic tool-abuse** (LLM06)
+- 🎯 **6 attack classes** — prompt injection (direct + indirect), jailbreak, **multi-turn crescendo**, system-prompt leak, **agentic tool-abuse** (LLM06), **insecure output handling** (LLM05)
 - 🧠 **Reasoning-model aware** — strips `<think>` chain-of-thought before judging (tested on DeepSeek-R1)
 - 🎣 **Canary-based detection** — precise oracles, not brittle "did it refuse?" heuristics
 - 🚦 **CI security gate** — ASR thresholds **plus baseline regression diffing** (`provoke compare`)
 - 🔌 **Any target** — OpenAI-compatible (OpenAI, Ollama, vLLM, …) + **native Anthropic/Claude**; offline mock for hermetic tests
 - 📈 **Multi-model benchmark** — `provoke benchmark` tabulates ASR across models ("which is most robust?")
+- 🔁 **Self-improving (experimental)** — `provoke discover`: an attacker model hunts *new* attacks that graduate into the regression suite
 - 📊 **SARIF · JSON · Markdown** reports — code-scanning alerts and PR comments
 
 > ⚖️ **Authorized testing only.** Provoke is a defensive tool for systems you own or are authorized to test. Probes measure *susceptibility* — e.g. whether the model emits a controlled, benign proof token under a jailbreak frame — and deliberately do **not** elicit harmful content.
@@ -187,6 +188,17 @@ provoke benchmark -c provoke.benchmark.yaml
 
 *(The example uses the offline mock at three robustness levels; point it at real `openai_compat` / `anthropic` targets to compare actual models.)*
 
+## Self-improving discovery (`provoke discover`) — experimental
+
+The fixed probe suite is the deterministic CI *gate*. `discover` is its **adaptive** counterpart: an attacker model proposes new attack prompts, each runs against the target, and failures feed back so the next round refines — a **discover → confirm → graduate** loop. Confirmed attacks are written out as new probe payloads (permanent regression tests), so the suite *grows itself*.
+
+```bash
+# needs an attacker model — set a `judge:` target in the config
+provoke discover -c provoke.yaml --rounds 3 -o discovered.yaml
+```
+
+**Two tiers by design:** *discovery* (adaptive, stochastic, run on demand) feeds the *deterministic suite* (fast, free, gates every PR). And the loop's logic is **fully unit-tested** — by injecting a scripted attacker + evaluator, the feedback/dedup/stop mechanics are verified with zero stochasticity. (Isolating orchestration from the model is how you test a self-improving system at all.)
+
 ## Architecture
 
 ```
@@ -211,6 +223,7 @@ provoke benchmark -c provoke.benchmark.yaml
 - **Reporting** (`reporting/`) — ASR aggregation, threshold gate, and JSON / Markdown / SARIF renderers.
 - **Compare** (`compare.py`) — baseline diffing: classifies each attempt as regression / improvement / new and gates CI on regressions.
 - **Benchmark** (`benchmark.py`) — runs the probe suite across many targets and renders a model-vs-probe ASR matrix.
+- **Discovery** (`discovery.py`) — adaptive self-improving loop: an attacker generator proposes attacks, failures feed back each round, and confirmed hits graduate into the corpus.
 
 ## Add a probe (the contributor path)
 
@@ -240,6 +253,7 @@ register(MyProbe())
 - [x] Baseline diffing (`provoke compare`) to flag *new* regressions per PR
 - [x] Multi-turn / crescendo attacks
 - [x] Native Anthropic/Claude target + multi-model benchmark (`provoke benchmark`)
+- [x] Adaptive self-improving discovery loop (`provoke discover`)
 - [ ] Bedrock target; multi-turn detection per-turn; HTML report
 
 ## Security considerations
